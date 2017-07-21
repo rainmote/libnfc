@@ -69,12 +69,15 @@ static uint8_t szAts = 0;
 static size_t szCL = 1;//Always start with Cascade Level 1 (CL1)
 static nfc_device *pnd;
 
+bool    debug = false;
 bool    quiet_output = false;
 bool    force_rats = false;
 bool    timed = false;
+bool    read_id_card = false;
+bool    console_mode = false;
 bool    iso_ats_supported = false;
 
-// ISO14443A Anti-Collision Commands
+// ISO14443A Anti-Collision cmds
 uint8_t  abtReqa[1] = { 0x26 };
 uint8_t  abtSelectAll[2] = { 0x93, 0x20 };
 uint8_t  abtSelectTag[9] = { 0x93, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -86,12 +89,12 @@ static  bool
 transmit_bits(const uint8_t *pbtTx, const size_t szTxBits)
 {
   uint32_t cycles = 0;
-  // Show transmitted command
+  // Show transmitted cmd
   if (!quiet_output) {
     printf("Sent bits:     ");
     print_hex_bits(pbtTx, szTxBits);
   }
-  // Transmit the bit frame command, we don't use the arbitrary parity feature
+  // Transmit the bit frame cmd, we don't use the arbitrary parity feature
   if (timed) {
     if ((szRxBits = nfc_initiator_transceive_bits_timed(pnd, pbtTx, szTxBits, NULL, abtRx, sizeof(abtRx), NULL, &cycles)) < 0)
       return false;
@@ -116,13 +119,13 @@ static  bool
 transmit_bytes(const uint8_t *pbtTx, const size_t szTx)
 {
   uint32_t cycles = 0;
-  // Show transmitted command
+  // Show transmitted cmd
   if (!quiet_output) {
     printf("Sent bits:     ");
     print_hex(pbtTx, szTx);
   }
   int res;
-  // Transmit the command bytes
+  // Transmit the cmd bytes
   if (timed) {
     if ((res = nfc_initiator_transceive_bytes_timed(pnd, pbtTx, szTx, abtRx, sizeof(abtRx), &cycles)) < 0)
       return false;
@@ -149,9 +152,34 @@ print_usage(char *argv[])
   printf("Usage: %s [OPTIONS]\n", argv[0]);
   printf("Options:\n");
   printf("\t-h\tHelp. Print this message.\n");
+  printf("\t-d\tDebug Mode.\n");
   printf("\t-q\tQuiet mode. Suppress output of READER and EMULATOR data (improves timing).\n");
+  printf("\t-r\tReset Id Card.\n");
+  printf("\t-g\tRead Id Card Info. Get PUPI/UUID.\n");
   printf("\t-f\tForce RATS.\n");
   printf("\t-t\tMeasure response time (in cycles).\n");
+}
+
+uint8_t
+string_to_bytes(char *src, uint8_t* dst)
+{
+    uint8_t index = 0;
+    uint8_t h,l;
+    char *p = src;
+    while(*p != '\0')
+    {
+        if (*p == ' ')
+        {
+            p++;
+            continue;
+        }
+        h = (*p & 0x0F) + (((*p & 0x40) >> 6) * 9);
+        p++;
+        l = (*p & 0x0F) + (((*p & 0x40) >> 6) * 9);
+        p++;
+        dst[index++] = h * 16 + l;
+    }
+    return index - 1;
 }
 
 int
@@ -159,13 +187,19 @@ main(int argc, char *argv[])
 {
   int     arg;
 
-  // Get commandline options
+  // Get cmdline options
   for (arg = 1; arg < argc; arg++) {
     if (0 == strcmp(argv[arg], "-h")) {
       print_usage(argv);
       exit(EXIT_SUCCESS);
+    } else if (0 == strcmp(argv[arg], "-d")) {
+      debug = true;
     } else if (0 == strcmp(argv[arg], "-q")) {
       quiet_output = true;
+    } else if (0 == strcmp(argv[arg], "-c")) {
+      console_mode = true;
+    } else if (0 == strcmp(argv[arg], "-g")) {
+      read_id_card = true;
     } else if (0 == strcmp(argv[arg], "-f")) {
       force_rats = true;
     } else if (0 == strcmp(argv[arg], "-t")) {
@@ -224,8 +258,78 @@ main(int argc, char *argv[])
   }
 
   printf("NFC reader: %s opened\n\n", nfc_device_get_name(pnd));
+  if (debug)
+  {
+      setenv("LIBNFC_LOG_LEVEL", "3", 1);
+  }
+  if (console_mode)
+  {
+      char buf[1024];
+      uint8_t cmd[1024];
+      uint8_t cmd_len;
+      do
+      {
+          memset(buf, 0, 1024);
+          memset(cmd, 0, 1024);
 
-  // Send the 7 bits request command specified in ISO 14443A (0x26)
+          printf("==> ");
+          if ( NULL == fgets(buf, 1024, stdin) )
+          {
+              break;
+          }
+
+          cmd_len = string_to_bytes(buf, cmd);
+
+          iso14443b_crc_append(cmd, cmd_len);
+          transmit_bytes(cmd, cmd_len + 2);
+      }while(1);
+      /*
+      uint8_t get_random[5] = { 0x00, 0x84, 0x00, 0x00, 0x08 };
+      iso14443b_crc_append(get_random, 5);
+      transmit_bytes(get_random, 5);
+      */
+
+      /*
+      uint8_t reset_used_fixed[8] = { 0x90, 0xF8, 0xCC, 0xCC, 0x01, 0xFF};
+      iso14443b_crc_append(reset_used_fixed, 6);
+      transmit_bytes(reset_used_fixed, 8);
+
+      uint8_t reset_pupi[12] = { 0x90, 0xF8, 0xEE, 0xEE, 0x0B, 0xFF, 0x00, 0x00, 0x00, 0x00};
+      iso14443b_crc_append(reset_pupi, 10);
+      transmit_bytes(reset_pupi, 12);
+      */
+
+      nfc_close(pnd);
+      nfc_exit(context);
+      exit(EXIT_SUCCESS);
+  }
+  if (read_id_card)
+  {
+      uint8_t PUPI[4];
+      uint8_t  REQB[5] = { 0x05, 0x00, 0x00 };
+      iso14443b_crc_append(REQB, 3);
+      transmit_bytes(REQB, 5);
+      memcpy(PUPI, abtRx + 1, 4);
+
+      printf("PUPI: ");
+      print_hex(PUPI, 4);
+
+      uint8_t Attrib[11] = { 0x1d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x01, 0x08 };
+      memcpy(Attrib + 1, PUPI, 4);
+      iso14443b_crc_append(Attrib, 9);
+      transmit_bytes(Attrib, 11);
+
+
+      uint8_t ReadGUID[7] = {0x00, 0x36, 0x00, 0x00, 0x08};
+      iso14443b_crc_append(ReadGUID, 5);
+      transmit_bytes(ReadGUID, 7);
+
+      nfc_close(pnd);
+      nfc_exit(context);
+      exit(EXIT_SUCCESS);
+  }
+
+  // Send the 7 bits request cmd specified in ISO 14443A (0x26)
   if (!transmit_bits(abtReqa, 7)) {
     printf("Error: No tag available\n");
     nfc_close(pnd);
@@ -245,7 +349,7 @@ main(int argc, char *argv[])
   // Save the UID CL1
   memcpy(abtRawUid, abtRx, 4);
 
-  //Prepare and send CL1 Select-Command
+  //Prepare and send CL1 Select-cmd
   memcpy(abtSelectTag + 2, abtRx, 5);
   iso14443a_crc_append(abtSelectTag, 7);
   transmit_bytes(abtSelectTag, 9);
@@ -263,7 +367,7 @@ main(int argc, char *argv[])
   if (szCL == 2) {
     // We have to do the anti-collision for cascade level 2
 
-    // Prepare CL2 commands
+    // Prepare CL2 cmds
     abtSelectAll[0] = 0x95;
 
     // Anti-collision
@@ -296,7 +400,7 @@ main(int argc, char *argv[])
     if (szCL == 3) {
       // We have to do the anti-collision for cascade level 3
 
-      // Prepare and send CL3 AC-Command
+      // Prepare and send CL3 AC-cmd
       abtSelectAll[0] = 0x97;
       transmit_bytes(abtSelectAll, 2);
 
@@ -308,7 +412,7 @@ main(int argc, char *argv[])
       // Save UID CL3
       memcpy(abtRawUid + 8, abtRx, 4);
 
-      // Prepare and send final Select-Command
+      // Prepare and send final Select-cmd
       abtSelectTag[0] = 0x97;
       memcpy(abtSelectTag + 2, abtRx, 5);
       iso14443a_crc_append(abtSelectTag, 7);

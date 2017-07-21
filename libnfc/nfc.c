@@ -468,7 +468,7 @@ nfc_initiator_init(nfc_device *pnd)
   if ((res = nfc_device_set_property_bool(pnd, NP_AUTO_ISO14443_4, true)) < 0)
     return res;
   // Force 14443-A mode
-  if ((res = nfc_device_set_property_bool(pnd, NP_FORCE_ISO14443_A, true)) < 0)
+  if ((res = nfc_device_set_property_bool(pnd, NP_FORCE_ISO14443_B, true)) < 0)
     return res;
   // Force speed at 106kbps
   if ((res = nfc_device_set_property_bool(pnd, NP_FORCE_SPEED_106, true)) < 0)

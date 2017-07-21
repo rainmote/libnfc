@@ -147,16 +147,29 @@ pn53x_reset_settings(struct nfc_device *pnd)
     return res;
   }
   // Make sure we reset the CRC and parity to chip handling.
-  if ((res = pn53x_set_property_bool(pnd, NP_HANDLE_CRC, true)) < 0)
+  if ((res = pn53x_set_property_bool(pnd, NP_HANDLE_CRC, false)) < 0)
     return res;
-  if ((res = pn53x_set_property_bool(pnd, NP_HANDLE_PARITY, true)) < 0)
+  if ((res = pn53x_set_property_bool(pnd, NP_HANDLE_PARITY, false)) < 0)
     return res;
   // Activate "easy framing" feature by default
-  if ((res = pn53x_set_property_bool(pnd, NP_EASY_FRAMING, true)) < 0)
+  if ((res = pn53x_set_property_bool(pnd, NP_EASY_FRAMING, false)) < 0)
     return res;
   // Deactivate the CRYPTO1 cipher, it may could cause problems when still active
   if ((res = pn53x_set_property_bool(pnd, NP_ACTIVATE_CRYPTO1, false)) < 0)
     return res;
+
+  pn53x_write_register(pnd, PN53X_REG_CIU_Mode, 0xff, 0xff);
+  pn53x_write_register(pnd, PN53X_REG_CIU_TxAuto, 0xff, 0x00);
+  pn53x_write_register(pnd, PN53X_REG_CIU_TxMode, 0xff, 0x03);
+  pn53x_write_register(pnd, PN53X_REG_CIU_RxMode, 0xff, 0x03);
+  pn53x_write_register(pnd, PN53X_REG_CIU_TypeB, 0xff, 0x03);
+  pn53x_write_register(pnd, PN53X_REG_CIU_Demod, 0xff, 0x4d);
+  pn53x_write_register(pnd, PN53X_REG_CIU_GsNOn, 0xff, 0xff);
+  pn53x_write_register(pnd, PN53X_REG_CIU_CWGsP, 0xff, 0x3f);
+  pn53x_write_register(pnd, PN53X_REG_CIU_ModGsP, 0xff, 0x18);
+  pn53x_write_register(pnd, PN53X_REG_CIU_RxThreshold, 0xff, 0x4d);
+  pn53x_write_register(pnd, PN53X_REG_CIU_ModWidth, 0xff, 0x68);
+  pn53x_write_register(pnd, PN53X_REG_CIU_ManualRCV, 0xff, 0x10);
 
   return NFC_SUCCESS;
 }
@@ -1486,11 +1499,13 @@ pn53x_initiator_transceive_bytes(struct nfc_device *pnd, const uint8_t *pbtTx, c
   uint8_t  abtCmd[PN53x_EXTENDED_FRAME__DATA_MAX_LEN];
   int res = 0;
 
+  /*
   // We can not just send bytes without parity if while the PN53X expects we handled them
   if (!pnd->bPar) {
     pnd->last_error = NFC_EINVARG;
     return pnd->last_error;
   }
+  */
 
   // Copy the data into the command frame
   if (pnd->bEasyFraming) {
@@ -1722,11 +1737,13 @@ pn53x_initiator_transceive_bytes_timed(struct nfc_device *pnd, const uint8_t *pb
   uint8_t sz = 0;
   int res = 0;
 
+  /*
   // We can not just send bytes without parity while the PN53X expects we handled them
   if (!pnd->bPar) {
     pnd->last_error = NFC_EINVARG;
     return pnd->last_error;
   }
+  */
   // Sorry, no easy framing support
   // TODO to be changed once we'll provide easy framing support from libnfc itself...
   if (pnd->bEasyFraming) {
