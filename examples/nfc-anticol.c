@@ -314,13 +314,13 @@ main(int argc, char *argv[])
       printf("PUPI: ");
       print_hex(PUPI, 4);
 
-      uint8_t Attrib[11] = { 0x1d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x01, 0x08 };
+      uint8_t Attrib[11] = { 0x1d, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x01, 0x08 };
       memcpy(Attrib + 1, PUPI, 4);
       iso14443b_crc_append(Attrib, 9);
       transmit_bytes(Attrib, 11);
 
 
-      uint8_t ReadGUID[7] = {0x00, 0x36, 0x00, 0x00, 0x08};
+      uint8_t ReadGUID[7] = {0x00, 0x84, 0x00, 0x00, 0x08};
       iso14443b_crc_append(ReadGUID, 5);
       transmit_bytes(ReadGUID, 7);
 
